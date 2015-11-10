@@ -4,4 +4,7 @@
 *.cmd
 Makefile
 dht_data.h
-
+.tmp_versions/
+*.symvers
+*.order
+*.mod.c
