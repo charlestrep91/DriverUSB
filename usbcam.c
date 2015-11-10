@@ -97,8 +97,10 @@ static struct usb_class_driver usbcam_class = {
 	.minor_base = USBCAM_MINOR,
 };
 
-
-int isStreaming;
+char tabHaut[4] = {0x00, 0x00, 0x80, 0xFF};
+char tabBas[4] = {0x00, 0x00, 0x80, 0x00};
+char tabGauche[4] = {0x80, 0x00, 0x00, 0x00};
+char tabDroite[4] = {0x80, 0xFF, 0x00, 0x00};
 
 static int __init usbcam_init(void) {
 	int error;
@@ -119,7 +121,6 @@ static int usbcam_probe (struct usb_interface *intf, const struct usb_device_id 
 //	const struct usb_endpoint_descriptor *endpoint;
 //	struct usb_device *dev = interface_to_usbdev(intf);
 	struct usbcam_dev *camdev = NULL;
-	isStreaming =0;
 	printk(KERN_ALERT   "ELE784 -> Probe...\n");
 
 	if(intf->cur_altsetting->desc.bInterfaceClass == CC_VIDEO)
@@ -127,7 +128,6 @@ static int usbcam_probe (struct usb_interface *intf, const struct usb_device_id 
 		printk(KERN_ALERT   "ELE784 -> CC_VIDEO device detected\n");
 		if(intf->cur_altsetting->desc.bInterfaceSubClass == SC_VIDEOSTREAMING)
 		{
-			isStreaming =1;
 			camdev = kmalloc (sizeof(struct usbcam_dev), GFP_KERNEL);
 			camdev->usbdev = usb_get_dev (interface_to_usbdev(intf));
 			usb_set_intfdata (intf, camdev);
@@ -197,9 +197,8 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg) {
 
 	struct usb_interface *intf = filp->private_data;	//TODO vieille methode??
 	struct usb_device *dev = usb_get_intfdata(intf);
-	int err;
+	int err = 0;
 	DIRECTION camDir;
-	char tabHaut[4] = {0x00, 0x00, 0x80, 0xFF};
 
 	if (_IOC_TYPE(cmd) != IOCTL_MAGICNUM)
 		return -ENOTTY;
@@ -237,15 +236,15 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg) {
 					break;
 
 					case BAS:
-
+						usb_control_msg(dev, 0, 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0100, 0x0900, tabBas, 4, 0);
 					break;
 
 					case GAUCHE:
-
+						usb_control_msg(dev, 0, 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0100, 0x0900, tabGauche, 4, 0);
 					break;
 
 					case DROITE:
-
+						usb_control_msg(dev, 0, 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0100, 0x0900, tabDroite, 4, 0);
 					break;
 				}
 			}

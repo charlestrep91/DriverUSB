@@ -25,9 +25,4 @@ typedef enum {HAUT, BAS, GAUCHE, DROITE} DIRECTION;
 //#define GAUCHE	2
 //#define DROITE	3
 
-char tabHaut[4] = {0x00, 0x00, 0x80, 0xFF};
-char tabBas[4] = {0x00, 0x00, 0x80, 0x00};
-char tabGauche[4] = {0x80, 0x00, 0x00, 0x00};
-char tabDroite[4] = {0x80, 0xFF, 0x00, 0x00};
-
 #endif /* USBCAMCMDSCMD_H_ */
