@@ -1,0 +1,7 @@
+*.ko
+*.o
+*.ko.cmd
+*.cmd
+Makefile
+dht_data.h
+
