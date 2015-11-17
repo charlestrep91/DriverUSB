@@ -66,7 +66,7 @@ struct class * my_class;
 
 static struct usb_device_id usbcam_table[] = {
 // { USB_DEVICE(VENDOR_ID, PRODUCT_ID) },
-{ USB_DEVICE(0x046d, 0x08cc) },
+//{ USB_DEVICE(0x046d, 0x08cc) },
 { USB_DEVICE(0x046d, 0x0994) },
 {}
 };
@@ -97,8 +97,8 @@ static struct usb_class_driver usbcam_class = {
 	.minor_base = USBCAM_MINOR,
 };
 
-char tabHaut[4] = {0x00, 0x00, 0x80, 0xFF};
-char tabBas[4] = {0x00, 0x00, 0x80, 0x00};
+char tabHaut[4] = 	{0x00, 0x00, 0x80, 0xFF};
+char tabBas[4] = 	{0x00, 0x00, 0x80, 0x00};
 char tabGauche[4] = {0x80, 0x00, 0x00, 0x00};
 char tabDroite[4] = {0x80, 0xFF, 0x00, 0x00};
 
@@ -129,6 +129,12 @@ static int usbcam_probe (struct usb_interface *intf, const struct usb_device_id 
 		if(intf->cur_altsetting->desc.bInterfaceSubClass == SC_VIDEOSTREAMING)
 		{
 			camdev = kmalloc (sizeof(struct usbcam_dev), GFP_KERNEL);
+			if(camdev<0)
+			{
+				printk(KERN_ALERT   "ELE784 -> KMALLOC FAIL...\n");
+				return -1;
+			}
+
 			camdev->usbdev = usb_get_dev (interface_to_usbdev(intf));
 			usb_set_intfdata (intf, camdev);
 			usb_register_dev (intf, &usbcam_class);			//enregistre le driver dans /dev
@@ -155,7 +161,6 @@ void usbcam_disconnect(struct usb_interface *intf) {
 	printk(KERN_ALERT   "ELE784 -> Disconnect...\n");
 
 
-	preempt_disable();
 	if(intf->cur_altsetting->desc.bInterfaceSubClass == SC_VIDEOSTREAMING)
 	{
 		usb_deregister_dev (intf, &usbcam_class);
@@ -163,7 +168,6 @@ void usbcam_disconnect(struct usb_interface *intf) {
 		camdev->usbdev = usb_get_dev (interface_to_usbdev(intf));
 		kfree(camdev);
 	}
-	preempt_enable();
 }
 
 int usbcam_open (struct inode *inode, struct file *filp) {
@@ -182,6 +186,9 @@ int usbcam_open (struct inode *inode, struct file *filp) {
 }
 
 int usbcam_release (struct inode *inode, struct file *filp) {
+	printk(KERN_WARNING "ELE784 -> Release... \n\r");
+
+
     return 0;
 }
 
@@ -193,12 +200,15 @@ ssize_t usbcam_write (struct file *filp, const char __user *ubuf, size_t count, 
     return 0;
 }
 
-long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg) {
+long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
+{
 
-	struct usb_interface *intf = filp->private_data;	//TODO vieille methode??
-	struct usb_device *dev = usb_get_intfdata(intf);
+	struct usb_interface *intf = filp->private_data;
+	struct usbcam_dev *camdev = (struct usbcam_dev *)usb_get_intfdata(intf);
+	struct usb_device *dev = camdev->usbdev;
 	int err = 0;
-	DIRECTION camDir;
+	char tempData;
+//	DIRECTION camDir;
 
 	if (_IOC_TYPE(cmd) != IOCTL_MAGICNUM)
 		return -ENOTTY;
@@ -216,35 +226,37 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg) {
 	switch(cmd)
 	{
 		case IOCTL_STREAMON:
-			usb_control_msg(dev, 0, 0x0B, USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_INTERFACE, 0x0004, 0x0001, NULL, 0, 0);
+			printk(KERN_WARNING "ELE784 -> STREAM ON... \n\r");
+			usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x0B, USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_INTERFACE, 0x0004, 0x0001, NULL, 0, 0);
 		break;
 
 		case IOCTL_STREAMOFF:
-			usb_control_msg(dev, 0, 0x0B, USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_INTERFACE, 0x0000, 0x0001, NULL, 0, 0);
+			printk(KERN_WARNING "ELE784 -> STREAM OFF... \n\r");
+			usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x0B, USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_INTERFACE, 0x0000, 0x0001, NULL, 0, 0);
 		break;
 
 		case IOCTL_PANTILT:
-			camDir = arg;
-			if(camDir < 0 || camDir >3)
+//			camDir = arg;
+			if(arg < 0 || arg >3)
 				printk(KERN_ALERT   "ELE784 -> IOCTL_PANTILT: Received invalid argument\n");
 			else
 			{
-				switch(camDir)
+				switch(arg)
 				{
 					case HAUT:
-						usb_control_msg(dev, 0, 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0100, 0x0900, tabHaut, 4, 0);
+						usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0100, 0x0900, tabHaut, 4, 0);
 					break;
 
 					case BAS:
-						usb_control_msg(dev, 0, 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0100, 0x0900, tabBas, 4, 0);
+						usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0100, 0x0900, tabBas, 4, 0);
 					break;
 
 					case GAUCHE:
-						usb_control_msg(dev, 0, 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0100, 0x0900, tabGauche, 4, 0);
+						usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0100, 0x0900, tabGauche, 4, 0);
 					break;
 
 					case DROITE:
-						usb_control_msg(dev, 0, 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0100, 0x0900, tabDroite, 4, 0);
+						usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0100, 0x0900, tabDroite, 4, 0);
 					break;
 				}
 			}
@@ -253,7 +265,8 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg) {
 		break;
 
 		case IOCTL_PANTILT_RESET:
-			usb_control_msg(dev, 0, 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0200, 0x0900, 0x03, 1, 0);
+			tempData = 0x03;
+			usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0200, 0x0900, &tempData, 1, 0);
 		break;
 
 	}
