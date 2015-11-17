@@ -236,9 +236,10 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 
 		case IOCTL_PANTILT:
+			printk(KERN_WARNING "ELE784 -> PAN TILT... \n\r");
 //			camDir = arg;
 			if(arg < 0 || arg >3)
-				printk(KERN_ALERT   "ELE784 -> IOCTL_PANTILT: Received invalid argument\n");
+				printk(KERN_ALERT   "ELE784 -> IOCTL_PANTILT: Received invalid argument: %d\n");
 			else
 			{
 				switch(arg)
@@ -265,6 +266,7 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 
 		case IOCTL_PANTILT_RESET:
+			printk(KERN_WARNING "ELE784 -> PAN TILT RESET... \n\r");
 			tempData = 0x03;
 			usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0200, 0x0900, &tempData, 1, 0);
 		break;
