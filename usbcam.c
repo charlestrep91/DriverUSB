@@ -66,7 +66,7 @@ struct class * my_class;
 
 static struct usb_device_id usbcam_table[] = {
 // { USB_DEVICE(VENDOR_ID, PRODUCT_ID) },
-//{ USB_DEVICE(0x046d, 0x08cc) },
+//{ USB_DEVICE(0x046d, 0x08cc) },s
 { USB_DEVICE(0x046d, 0x0994) },
 {}
 };
@@ -202,7 +202,7 @@ ssize_t usbcam_write (struct file *filp, const char __user *ubuf, size_t count, 
 
 long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 {
-
+	unsigned int argument = (unsigned int)arg;
 	struct usb_interface *intf = filp->private_data;
 	struct usbcam_dev *camdev = (struct usbcam_dev *)usb_get_intfdata(intf);
 	struct usb_device *dev = camdev->usbdev;
@@ -237,15 +237,15 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 
 		case IOCTL_PANTILT:
 			printk(KERN_WARNING "ELE784 -> PAN TILT... \n\r");
-//			camDir = arg;
-			if(arg < 0 || arg >3)
+			if(argument < 0 || argument >3)
 				printk(KERN_ALERT   "ELE784 -> IOCTL_PANTILT: Received invalid argument: %d\n");
 			else
 			{
-				switch(arg)
+				switch(argument)
 				{
 					case HAUT:
 						usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0100, 0x0900, tabHaut, 4, 0);
+						printk(KERN_ALERT   "ELE784 -> IOCTL_PANTILT HAUT\n");
 					break;
 
 					case BAS:
@@ -269,6 +269,10 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 			printk(KERN_WARNING "ELE784 -> PAN TILT RESET... \n\r");
 			tempData = 0x03;
 			usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0200, 0x0900, &tempData, 1, 0);
+		break;
+
+		default:
+			printk(KERN_WARNING "ELE784 -> Undefined command\n\r");
 		break;
 
 	}
