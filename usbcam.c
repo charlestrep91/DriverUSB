@@ -97,14 +97,12 @@ static struct usb_class_driver usbcam_class = {
 	.minor_base = USBCAM_MINOR,
 };
 
-//char tabHaut[4] = 	{0x00, 0x00, 0x80, 0xFF};
-//char tabBas[4] = 	{0x00, 0x00, 0x80, 0x00};
-//char tabGauche[4] = {0x80, 0x00, 0x00, 0x00};
-//char tabDroite[4] = {0x80, 0xFF, 0x00, 0x00};
+struct completion read_complete;
 
 static int __init usbcam_init(void) {
 	int error;
 	printk(KERN_ALERT   "ELE784 -> Init...\n");
+	init_completion(&read_complete);
 	error = usb_register(&usbcam_driver);
 	if(error)
 		printk(KERN_ALERT   "ELE784 -> Initialization failed, error: %d\n",error);
@@ -192,7 +190,22 @@ int usbcam_release (struct inode *inode, struct file *filp) {
     return 0;
 }
 
-ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t *f_ops) {
+ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t *f_ops)
+{
+	struct usb_interface *intf = filp->private_data;
+	struct usbcam_dev *camdev = (struct usbcam_dev *)usb_get_intfdata(intf);
+	struct usb_device *dev = camdev->usbdev;
+	int i;
+	int nbUrbs = 5;
+
+	wait_for_completion(&read_complete);
+	copy_to_user(ubuf, myData, myLengthUsed); //TODO verifier l'allocation de myData
+    for (i = 0; i < nbUrbs; ++i)
+    {
+    	usb_kill_urb(myUrb[i]);
+    	usb_free_coherent(dev, myUrb[i]->transfer_buffer_length, myUrb[i]->transfer_buffer, myUrb[i]->transfer_dma);
+    	usb_free_urb(myUrb[i]);
+    }
     return 0;
 }
 
@@ -275,6 +288,11 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 			usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0200, 0x0900, &tempData, 1, 0);
 		break;
 
+		case IOCTL_GRAB:
+			printk(KERN_ALERT "ELE784 -> GRAB... \n\r");
+			urbInit(NULL, intf);
+			break;
+
 		default:
 			printk(KERN_ALERT "ELE784 -> Undefined command\n\r");
 		break;
@@ -289,52 +307,58 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 // **** Private functions **** //
 // *************************** //
 
-/* FIXME: REMOVE THIS LINE
-
 int urbInit(struct urb *urb, struct usb_interface *intf) {
     int i, j, ret, nbPackets, myPacketSize, size, nbUrbs;
     struct usb_host_interface *cur_altsetting = intf->cur_altsetting;
     struct usb_endpoint_descriptor endpointDesc = cur_altsetting->endpoint[0].desc;
+    struct usbcam_dev *camdev = (struct usbcam_dev *)usb_get_intfdata(intf);
+	struct usb_device *dev = camdev->usbdev;
 
     nbPackets = 40;  // The number of isochronous packets this urb should contain
     myPacketSize = le16_to_cpu(endpointDesc.wMaxPacketSize);
     size = myPacketSize * nbPackets;
     nbUrbs = 5;
 
-    for (i = 0; i < nbUrbs; ++i) {
-        // TODO: usb_free_urb(...);
-        // TODO: myUrb[i] = usb_alloc_urb(...);
-        if (myUrb[i] == NULL) {
-            // TODO: printk(KERN_WARNING "");
+    for (i = 0; i < nbUrbs; ++i)
+    {
+        usb_free_urb(myUrb[i]);
+        myUrb[i] = usb_alloc_urb(nbPackets, GFP_KERNEL);
+        if (myUrb[i] == NULL)
+        {
+            printk(KERN_ALERT "ELE784 -> One or more urb could not be allocated \n");
             return -ENOMEM;
         }
 
-        // TODO: myUrb[i]->transfer_buffer = usb_buffer_alloc(...);
+        myUrb[i]->transfer_buffer = usb_alloc_coherent(dev, size, GFP_DMA, &myUrb[i]->transfer_dma);
 
-        if (myUrb[i]->transfer_buffer == NULL) {
-            // printk(KERN_WARNING "");
-            usb_free_urb(myUrb[i]);
+        if (myUrb[i]->transfer_buffer == NULL)
+        {
+        	printk(KERN_ALERT "ELE784 -> One or more urb  transfer buffers could not be allocated \n");
+        	usb_free_urb(myUrb[i]);
             return -ENOMEM;
         }
 
-        // TODO: myUrb[i]->dev = ...
-        // TODO: myUrb[i]->context = *dev*;
-        // TODO: myUrb[i]->pipe = usb_rcvisocpipe(*dev*, endpointDesc.bEndpointAddress);
+        myUrb[i]->dev = dev;
+        myUrb[i]->context = dev;
+        myUrb[i]->pipe = usb_rcvisocpipe(dev, endpointDesc.bEndpointAddress);
         myUrb[i]->transfer_flags = URB_ISO_ASAP | URB_NO_TRANSFER_DMA_MAP;
         myUrb[i]->interval = endpointDesc.bInterval;
-        // TODO: myUrb[i]->complete = ...
-        // TODO: myUrb[i]->number_of_packets = ...
-        // TODO: myUrb[i]->transfer_buffer_length = ...
+        myUrb[i]->complete = urbCompletionCallback;
+        myUrb[i]->number_of_packets = nbPackets;
+        myUrb[i]->transfer_buffer_length = size;
 
-        for (j = 0; j < nbPackets; ++j) {
+        for (j = 0; j < nbPackets; ++j)
+        {
             myUrb[i]->iso_frame_desc[j].offset = j * myPacketSize;
             myUrb[i]->iso_frame_desc[j].length = myPacketSize;
         }
     }
 
-    for(i = 0; i < nbUrbs; i++){
-        // TODO: if ((ret = usb_submit_urb(...)) < 0) {
-            // TODO: printk(KERN_WARNING "");
+    for(i = 0; i < nbUrbs; i++)
+    {
+        if ((ret = usb_submit_urb(myUrb[i], GFP_KERNEL)) < 0)
+        {
+            printk(KERN_WARNING "ELE784 -> Urb submit to USB core failed: %d\n", ret);
             return ret;
         }
     }
@@ -391,15 +415,11 @@ static void urbCompletionCallback(struct urb *urb) {
             if ((ret = usb_submit_urb(urb, GFP_ATOMIC)) < 0) {
                 // TODO: printk(KERN_WARNING "");
             }
-        } else {
-            ///////////////////////////////////////////////////////////////////////
-            //  Synchronisation
-            ///////////////////////////////////////////////////////////////////////
-            //TODO
+        } else
+        {
+            complete(&read_complete);
         }
     } else {
         // TODO: printk(KERN_WARNING "");
     }
 }
-
-FIXME: REMOVE THIS LINE*/

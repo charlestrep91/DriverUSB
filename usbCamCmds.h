@@ -16,8 +16,9 @@
 #define IOCTL_STREAMOFF			_IOR(IOCTL_MAGICNUM, 1, int)
 #define IOCTL_PANTILT			_IOR(IOCTL_MAGICNUM, 2, int)
 #define IOCTL_PANTILT_RESET		_IOR(IOCTL_MAGICNUM, 3, int)
+#define IOCTL_GRAB				_IOR(IOCTL_MAGICNUM, 4, int)
 
-#define IOCTL_MAXNR			3
+#define IOCTL_MAXNR			4
 
 typedef enum {HAUT, BAS, GAUCHE, DROITE} DIRECTION;
 //#define HAUT	0
