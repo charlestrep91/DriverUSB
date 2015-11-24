@@ -97,10 +97,10 @@ static struct usb_class_driver usbcam_class = {
 	.minor_base = USBCAM_MINOR,
 };
 
-char tabHaut[4] = 	{0x00, 0x00, 0x80, 0xFF};
-char tabBas[4] = 	{0x00, 0x00, 0x80, 0x00};
-char tabGauche[4] = {0x80, 0x00, 0x00, 0x00};
-char tabDroite[4] = {0x80, 0xFF, 0x00, 0x00};
+//char tabHaut[4] = 	{0x00, 0x00, 0x80, 0xFF};
+//char tabBas[4] = 	{0x00, 0x00, 0x80, 0x00};
+//char tabGauche[4] = {0x80, 0x00, 0x00, 0x00};
+//char tabDroite[4] = {0x80, 0xFF, 0x00, 0x00};
 
 static int __init usbcam_init(void) {
 	int error;
@@ -163,22 +163,22 @@ void usbcam_disconnect(struct usb_interface *intf) {
 
 	if(intf->cur_altsetting->desc.bInterfaceSubClass == SC_VIDEOSTREAMING)
 	{
-		usb_deregister_dev (intf, &usbcam_class);
-		usb_set_intfdata (intf, NULL);
-		camdev->usbdev = usb_get_dev (interface_to_usbdev(intf));
+		camdev = (struct usbcam_dev *)usb_get_intfdata(intf);
 		kfree(camdev);
+		usb_set_intfdata (intf, NULL);
+		usb_deregister_dev (intf, &usbcam_class);
 	}
 }
 
 int usbcam_open (struct inode *inode, struct file *filp) {
 	struct usb_interface *intf;
 	int subminor;
-	printk(KERN_WARNING "ELE784 -> Open... \n\r");
+	printk(KERN_ALERT "ELE784 -> Open... \n\r");
 	subminor = iminor(inode);
 	intf = usb_find_interface(&usbcam_driver, subminor);
 	if (!intf)
 	{
-		printk(KERN_WARNING "ELE784 -> Open: Ne peux ouvrir le peripherique");
+		printk(KERN_ALERT "ELE784 -> Open: Ne peux ouvrir le peripherique");
 		return -ENODEV;
 	}
 	filp->private_data = intf;
@@ -186,7 +186,7 @@ int usbcam_open (struct inode *inode, struct file *filp) {
 }
 
 int usbcam_release (struct inode *inode, struct file *filp) {
-	printk(KERN_WARNING "ELE784 -> Release... \n\r");
+	printk(KERN_ALERT "ELE784 -> Release... \n\r");
 
 
     return 0;
@@ -208,6 +208,10 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 	struct usb_device *dev = camdev->usbdev;
 	int err = 0;
 	char tempData;
+	char tabHaut[4] = 	{0x00, 0x00, 0x80, 0xFF};
+	char tabBas[4] = 	{0x00, 0x00, 0x80, 0x00};
+	char tabGauche[4] = {0x80, 0x00, 0x00, 0x00};
+	char tabDroite[4] = {0x80, 0xFF, 0x00, 0x00};
 //	DIRECTION camDir;
 
 	if (_IOC_TYPE(cmd) != IOCTL_MAGICNUM)
@@ -226,17 +230,17 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 	switch(cmd)
 	{
 		case IOCTL_STREAMON:
-			printk(KERN_WARNING "ELE784 -> STREAM ON... \n\r");
+			printk(KERN_ALERT "ELE784 -> STREAM ON... \n\r");
 			usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x0B, USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_INTERFACE, 0x0004, 0x0001, NULL, 0, 0);
 		break;
 
 		case IOCTL_STREAMOFF:
-			printk(KERN_WARNING "ELE784 -> STREAM OFF... \n\r");
+			printk(KERN_ALERT "ELE784 -> STREAM OFF... \n\r");
 			usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x0B, USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_INTERFACE, 0x0000, 0x0001, NULL, 0, 0);
 		break;
 
 		case IOCTL_PANTILT:
-			printk(KERN_WARNING "ELE784 -> PAN TILT... \n\r");
+			printk(KERN_ALERT "ELE784 -> PAN TILT... \n\r");
 			if(argument < 0 || argument >3)
 				printk(KERN_ALERT   "ELE784 -> IOCTL_PANTILT: Received invalid argument: %d\n");
 			else
@@ -266,16 +270,17 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 
 		case IOCTL_PANTILT_RESET:
-			printk(KERN_WARNING "ELE784 -> PAN TILT RESET... \n\r");
+			printk(KERN_ALERT "ELE784 -> PAN TILT RESET... \n\r");
 			tempData = 0x03;
 			usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x01, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE, 0x0200, 0x0900, &tempData, 1, 0);
 		break;
 
 		default:
-			printk(KERN_WARNING "ELE784 -> Undefined command\n\r");
+			printk(KERN_ALERT "ELE784 -> Undefined command\n\r");
 		break;
 
 	}
+
     return 0;
 }
 
