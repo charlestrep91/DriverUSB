@@ -30,6 +30,13 @@
 #include "dht_data.h"
 #include "usbCamCmds.h"
 
+//TODO verify kmalloc myData si necessaire
+//TODO init du read_complete (init vs reinit)
+//TODO kfree de read_complete
+//TODO init de myLengthUsed dans initUrb
+//TODO ajout verification mystatus dans le read()
+//TODO modifier path du jpeg
+
 // Module Information
 MODULE_AUTHOR("prenom nom #1, prenom nom #2");
 MODULE_LICENSE("Dual BSD/GPL");
@@ -201,8 +208,11 @@ ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t 
 	int i;
 	int nbUrbs = 5;
 
+	printk(KERN_ALERT "ELE784 -> waiting for completion...\n");
 	wait_for_completion(&read_complete);
+	printk(KERN_ALERT "ELE784 -> wait for completion done\n");
 	copy_to_user(ubuf, myData, myLengthUsed); //TODO verifier l'allocation de myData
+	printk(KERN_ALERT "ELE784 -> copy to user done\n");
     for (i = 0; i < nbUrbs; ++i)
     {
     	usb_kill_urb(myUrb[i]);
