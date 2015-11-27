@@ -206,7 +206,7 @@ ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t 
     	usb_free_coherent(dev, myUrb[i]->transfer_buffer_length, myUrb[i]->transfer_buffer, myUrb[i]->transfer_dma);
     	usb_free_urb(myUrb[i]);
     }
-    return 0;
+    return myLengthUsed;
 }
 
 ssize_t usbcam_write (struct file *filp, const char __user *ubuf, size_t count, loff_t *f_ops) {
@@ -225,7 +225,6 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 	char tabBas[4] = 	{0x00, 0x00, 0x80, 0x00};
 	char tabGauche[4] = {0x80, 0x00, 0x00, 0x00};
 	char tabDroite[4] = {0x80, 0xFF, 0x00, 0x00};
-//	DIRECTION camDir;
 
 	if (_IOC_TYPE(cmd) != IOCTL_MAGICNUM)
 		return -ENOTTY;

@@ -21,9 +21,5 @@
 #define IOCTL_MAXNR			4
 
 typedef enum {HAUT, BAS, GAUCHE, DROITE} DIRECTION;
-//#define HAUT	0
-//#define BAS		1
-//#define GAUCHE	2
-//#define DROITE	3
 
 #endif /* USBCAMCMDSCMD_H_ */
