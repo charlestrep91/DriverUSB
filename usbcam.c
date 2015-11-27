@@ -104,6 +104,7 @@ static int __init usbcam_init(void) {
 	printk(KERN_ALERT   "ELE784 -> Init...\n");
 	error = usb_register(&usbcam_driver);
 	init_completion(&read_complete);
+	myData = kmalloc((42666 * 2)* sizeof(unsigned char), GFP_KERNEL);
 	if(error)
 		printk(KERN_ALERT   "ELE784 -> Initialization failed, error: %d\n",error);
     return error;
@@ -113,6 +114,7 @@ static void __exit usbcam_exit(void) {
 	printk(KERN_ALERT   "ELE784 -> Exiting...\n");
 	usb_deregister(&usbcam_driver);
 	kfree(&read_complete);
+	kfree(myData);
 }
 
 static int usbcam_probe (struct usb_interface *intf, const struct usb_device_id *devid) {
@@ -319,6 +321,7 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
     size = myPacketSize * nbPackets;
     nbUrbs = 5;
     reinit_completion(&read_complete);
+    myLengthUsed = 0;
 
 
     for (i = 0; i < nbUrbs; ++i)
