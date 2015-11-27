@@ -102,8 +102,8 @@ struct completion read_complete;
 static int __init usbcam_init(void) {
 	int error;
 	printk(KERN_ALERT   "ELE784 -> Init...\n");
-	init_completion(&read_complete);
 	error = usb_register(&usbcam_driver);
+	init_completion(&read_complete);
 	if(error)
 		printk(KERN_ALERT   "ELE784 -> Initialization failed, error: %d\n",error);
     return error;
@@ -112,6 +112,7 @@ static int __init usbcam_init(void) {
 static void __exit usbcam_exit(void) {
 	printk(KERN_ALERT   "ELE784 -> Exiting...\n");
 	usb_deregister(&usbcam_driver);
+	kfree(&read_complete);
 }
 
 static int usbcam_probe (struct usb_interface *intf, const struct usb_device_id *devid) {
@@ -317,6 +318,8 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
     myPacketSize = le16_to_cpu(endpointDesc.wMaxPacketSize);
     size = myPacketSize * nbPackets;
     nbUrbs = 5;
+    reinit_completion(&read_complete);
+
 
     for (i = 0; i < nbUrbs; ++i)
     {
