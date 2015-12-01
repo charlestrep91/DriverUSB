@@ -30,13 +30,6 @@
 #include "dht_data.h"
 #include "usbCamCmds.h"
 
-//TODO verify kmalloc myData si necessaire
-//TODO init du read_complete (init vs reinit)
-//TODO kfree de read_complete
-//TODO init de myLengthUsed dans initUrb
-//TODO ajout verification mystatus dans le read()
-//TODO modifier path du jpeg
-
 // Module Information
 MODULE_AUTHOR("prenom nom #1, prenom nom #2");
 MODULE_LICENSE("Dual BSD/GPL");
@@ -64,6 +57,7 @@ static unsigned int myLength;
 static unsigned int myLengthUsed;
 static char * myData;
 static struct urb *myUrb[5];
+static char myUrbCount;
 
 struct usbcam_dev {
 	struct usb_device *usbdev;
@@ -73,7 +67,7 @@ struct class * my_class;
 
 static struct usb_device_id usbcam_table[] = {
 // { USB_DEVICE(VENDOR_ID, PRODUCT_ID) },
-//{ USB_DEVICE(0x046d, 0x08cc) },s
+//{ USB_DEVICE(0x046d, 0x08cc) },
 { USB_DEVICE(0x046d, 0x0994) },
 {}
 };
@@ -98,7 +92,8 @@ struct file_operations usbcam_fops = {
 };
 
 #define USBCAM_MINOR 0
-static struct usb_class_driver usbcam_class = {
+static struct usb_class_driver usbcam_class =
+{
 	.name       = "usb/usbcam%d",
 	.fops       = &usbcam_fops,
 	.minor_base = USBCAM_MINOR,
@@ -111,23 +106,24 @@ static int __init usbcam_init(void) {
 	printk(KERN_ALERT   "ELE784 -> Init...\n");
 	error = usb_register(&usbcam_driver);
 	init_completion(&read_complete);
-	myData = kmalloc((42666 * 2)* sizeof(unsigned char), GFP_KERNEL);
+	myLength = 42666;
+	myData = kmalloc((myLength * 2)* sizeof(unsigned char), GFP_KERNEL);
+
 	if(error)
 		printk(KERN_ALERT   "ELE784 -> Initialization failed, error: %d\n",error);
     return error;
 }
 
-static void __exit usbcam_exit(void) {
+static void __exit usbcam_exit(void)
+{
 	printk(KERN_ALERT   "ELE784 -> Exiting...\n");
 	usb_deregister(&usbcam_driver);
 	kfree(&read_complete);
 	kfree(myData);
 }
 
-static int usbcam_probe (struct usb_interface *intf, const struct usb_device_id *devid) {
-//	const struct usb_host_interface *interface;
-//	const struct usb_endpoint_descriptor *endpoint;
-//	struct usb_device *dev = interface_to_usbdev(intf);
+static int usbcam_probe (struct usb_interface *intf, const struct usb_device_id *devid)
+{
 	struct usbcam_dev *camdev = NULL;
 	printk(KERN_ALERT   "ELE784 -> Probe...\n");
 
@@ -175,6 +171,7 @@ void usbcam_disconnect(struct usb_interface *intf) {
 		kfree(camdev);
 		usb_set_intfdata (intf, NULL);
 		usb_deregister_dev (intf, &usbcam_class);
+		printk(KERN_ALERT   "ELE784 -> Disconnect VIDEOSTREAMING...\n");
 	}
 }
 
@@ -209,9 +206,14 @@ ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t 
 	int nbUrbs = 5;
 
 	printk(KERN_ALERT "ELE784 -> waiting for completion...\n");
-	wait_for_completion(&read_complete);
+	while(myUrbCount<nbUrbs)
+	{
+		printk(KERN_ALERT "ELE784 -> waiting for completion...\n");
+		wait_for_completion(&read_complete);
+		printk(KERN_ALERT "ELE784 -> myUrbCount: %d\n", myUrbCount);
+	}
 	printk(KERN_ALERT "ELE784 -> wait for completion done\n");
-	copy_to_user(ubuf, myData, myLengthUsed); //TODO verifier l'allocation de myData
+	copy_to_user(ubuf, myData, myLengthUsed);
 	printk(KERN_ALERT "ELE784 -> copy to user done\n");
     for (i = 0; i < nbUrbs; ++i)
     {
@@ -332,7 +334,8 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
     nbUrbs = 5;
     reinit_completion(&read_complete);
     myLengthUsed = 0;
-
+    myUrbCount = 0;
+    myStatus = 0;
 
     for (i = 0; i < nbUrbs; ++i)
     {
@@ -381,7 +384,8 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
 }
 
 
-static void urbCompletionCallback(struct urb *urb) {
+static void urbCompletionCallback(struct urb *urb)
+{
     int ret;
     int i;
     unsigned char * data;
@@ -390,22 +394,32 @@ static void urbCompletionCallback(struct urb *urb) {
     unsigned int nbytes;
     void * mem;
 
-    if(urb->status == 0){
-
-        for (i = 0; i < urb->number_of_packets; ++i) {
-            if(myStatus == 1){
+    if(urb->status == 0)
+    {
+//    	printk(KERN_ALERT "ELE784 -> valid urb detected, number of packets: %d\n", urb->number_of_packets);
+        for (i = 0; i < urb->number_of_packets; ++i)
+        {
+//        	printk(KERN_ALERT "ELE784 -> i = %d\n", i);
+            if(myStatus == 1)
+            {
+//            	printk(KERN_ALERT "ELE784 -> continue1\n");
                 continue;
             }
-            if (urb->iso_frame_desc[i].status < 0) {
+            if (urb->iso_frame_desc[i].status < 0)
+            {
+            	printk(KERN_ALERT "ELE784 -> continue2: %d\n", urb->iso_frame_desc[i].status);
                 continue;
             }
-
             data = urb->transfer_buffer + urb->iso_frame_desc[i].offset;
-            if(data[1] & (1 << 6)){
+            if(data[1] & (1 << 6))
+            {
+            	printk(KERN_ALERT "ELE784 -> continue3\n");
                 continue;
             }
             len = urb->iso_frame_desc[i].actual_length;
-            if (len < 2 || data[0] < 2 || data[0] > len){
+            if (len < 2 || data[0] < 2 || data[0] > len)
+            {
+            	printk(KERN_ALERT "ELE784 -> continue4\n");
                 continue;
             }
 
@@ -416,25 +430,35 @@ static void urbCompletionCallback(struct urb *urb) {
             memcpy(mem, data + data[0], nbytes);
             myLengthUsed += nbytes;
 
-            if (len > maxlen) {
+            if (len > maxlen)
+            {
                 myStatus = 1; // DONE
             }
 
             // Mark the buffer as done if the EOF marker is set.
-            if ((data[1] & (1 << 1)) && (myLengthUsed != 0)) {
+            if ((data[1] & (1 << 1)) && (myLengthUsed != 0))
+            {
                 myStatus = 1; // DONE
             }
         }
 
-        if (!(myStatus == 1)){
-            if ((ret = usb_submit_urb(urb, GFP_ATOMIC)) < 0) {
-                // TODO: printk(KERN_WARNING "");
-            }
-        } else
+        if (!(myStatus == 1))
         {
-            complete(&read_complete);
+//        	printk(KERN_ALERT "ELE784 -> sending urb...\n");
+            if ((ret = usb_submit_urb(urb, GFP_ATOMIC)) < 0)
+            {
+                 printk(KERN_ALERT "ELE784 -> error submitting urb\n");
+            }
         }
-    } else {
-        // TODO: printk(KERN_WARNING "");
+        else
+        {
+        	myUrbCount++;
+            complete(&read_complete);
+//            printk(KERN_ALERT "ELE784 -> complete signal sent\n");
+        }
+    }
+    else
+    {
+    	printk(KERN_ALERT "ELE784 -> urb status invalid\n");
     }
 }
