@@ -30,6 +30,11 @@
 #include "dht_data.h"
 #include "usbCamCmds.h"
 
+//TODO verifier l'utilisation de usb_free_coherent
+//TODO s'assurer qu'on recupere bien la structure usbcamdev dans chaque fonction
+//TODO verifier si usb_submit_urb doit etre GFP_ATOMIC ou GFP_KERNEL
+//TODO verifier si on devrait seulement avec un complete lorsque les 5 urbs sont recus au lieu de pour chacun
+
 // Module Information
 MODULE_AUTHOR("prenom nom #1, prenom nom #2");
 MODULE_LICENSE("Dual BSD/GPL");
@@ -58,6 +63,7 @@ static unsigned int myLengthUsed;
 static char * myData;
 static struct urb *myUrb[5];
 static char myUrbCount;
+static unsigned int transfer_buffer_size;
 
 struct usbcam_dev {
 	struct usb_device *usbdev;
@@ -218,7 +224,8 @@ ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t 
     for (i = 0; i < nbUrbs; ++i)
     {
     	usb_kill_urb(myUrb[i]);
-    	usb_free_coherent(dev, myUrb[i]->transfer_buffer_length, myUrb[i]->transfer_buffer, myUrb[i]->transfer_dma);
+    	usb_free_coherent(dev, /*myUrb[i]->transfer_buffer_length*/ transfer_buffer_size, myUrb[i]->transfer_buffer, myUrb[i]->transfer_dma);
+//    	myUrb[i]->transfer_buffer = usb_alloc_coherent(dev, size, GFP_DMA, &myUrb[i]->transfer_dma);
     	usb_free_urb(myUrb[i]);
     }
     return myLengthUsed;
@@ -331,6 +338,7 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
     nbPackets = 40;  // The number of isochronous packets this urb should contain
     myPacketSize = le16_to_cpu(endpointDesc.wMaxPacketSize);
     size = myPacketSize * nbPackets;
+    transfer_buffer_size = size;
     nbUrbs = 5;
     reinit_completion(&read_complete);
     myLengthUsed = 0;
@@ -374,7 +382,7 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
 
     for(i = 0; i < nbUrbs; i++)
     {
-        if ((ret = usb_submit_urb(myUrb[i], GFP_KERNEL)) < 0)
+        if ((ret = usb_submit_urb(myUrb[i], GFP_ATOMIC)) < 0) //GFP_ATOMIC
         {
             printk(KERN_WARNING "ELE784 -> Urb submit to USB core failed: %d\n", ret);
             return ret;
