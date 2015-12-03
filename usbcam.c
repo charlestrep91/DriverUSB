@@ -193,6 +193,7 @@ int usbcam_open (struct inode *inode, struct file *filp) {
 		return -ENODEV;
 	}
 	filp->private_data = intf;
+	printK(KERN_ALERT "ELE784 -> intf est assigne");
 	return 0;
 }
 
@@ -221,7 +222,7 @@ ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t 
 	printk(KERN_ALERT "ELE784 -> wait for completion done\n");
 	copy_to_user(ubuf, myData, myLengthUsed);
 	printk(KERN_ALERT "ELE784 -> copy to user done\n");
-    for (i = 0; i < nbUrbs; ++i)
+    for (i = 0; i < nbUrbs; i++)
     {
     	usb_kill_urb(myUrb[i]);
     	usb_free_coherent(dev, /*myUrb[i]->transfer_buffer_length*/ transfer_buffer_size, myUrb[i]->transfer_buffer, myUrb[i]->transfer_dma);
@@ -345,7 +346,7 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
     myUrbCount = 0;
     myStatus = 0;
 
-    for (i = 0; i < nbUrbs; ++i)
+    for (i = 0; i < nbUrbs; i++)
     {
         usb_free_urb(myUrb[i]);
         myUrb[i] = usb_alloc_urb(nbPackets, GFP_KERNEL);
