@@ -213,7 +213,7 @@ ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t 
 
 	printk(KERN_ALERT "ELE784 -> waiting for completion...\n");
 	wait_for_completion(&read_complete);
-	if(atomic_read(&myUrbCount )!= 5)
+	if(atomic_read(&myUrbCount )!= NB_URBS)
 		return -1;
 	copy_to_user(ubuf, myData, myLengthUsed);
 	printk(KERN_ALERT "ELE784 -> copy to user done\n");
