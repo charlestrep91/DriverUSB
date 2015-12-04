@@ -30,14 +30,12 @@
 #include "dht_data.h"
 #include "usbCamCmds.h"
 
-//TODO verifier l'utilisation de usb_free_coherent
-//TODO s'assurer qu'on recupere bien la structure usbcamdev dans chaque fonction
-//TODO verifier si usb_submit_urb doit etre GFP_ATOMIC ou GFP_KERNEL
-//TODO verifier si on devrait seulement avec un complete lorsque les 5 urbs sont recus au lieu de pour chacun
-//TODO creer les urb dans IOCTL et passer le pointeur a urbInit solution propose par Matthieu
+#define NB_URBS 5
+
+
 
 // Module Information
-MODULE_AUTHOR("prenom nom #1, prenom nom #2");
+MODULE_AUTHOR("Jonathan Lapointe, Charles trepanier");
 MODULE_LICENSE("Dual BSD/GPL");
 
 // Prototypes
@@ -212,21 +210,23 @@ ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t 
 	struct usbcam_dev *camdev = (struct usbcam_dev *)usb_get_intfdata(intf);
 	struct usb_device *dev = camdev->usbdev;
 	int i;
-	int nbUrbs = 5;
-	int myUrbCountLocal;
 
 	printk(KERN_ALERT "ELE784 -> waiting for completion...\n");
 	wait_for_completion(&read_complete);
-
-	printk(KERN_ALERT "ELE784 -> wait for completion done\n");
+	if(atomic_read(&myUrbCount )!= 5)
+		return -1;
 	copy_to_user(ubuf, myData, myLengthUsed);
 	printk(KERN_ALERT "ELE784 -> copy to user done\n");
-    for (i = 0; i < nbUrbs; i++)
+
+    for (i = 0; i < NB_URBS; i++)
     {
-    	usb_kill_urb(myUrb[i]);
-    	//usb_free_coherent(dev, /*myUrb[i]->transfer_buffer_length*/ transfer_buffer_size, myUrb[i]->transfer_buffer, myUrb[i]->transfer_dma);
-//    	myUrb[i]->transfer_buffer = usb_alloc_coherent(dev, size, GFP_DMA, &myUrb[i]->transfer_dma);
-    	usb_free_urb(myUrb[i]);
+    	if(myUrb[i]!=NULL)
+    	{
+			usb_kill_urb(myUrb[i]);
+			usb_free_coherent(dev, myUrb[i]->transfer_buffer_length, myUrb[i]->transfer_buffer, myUrb[i]->transfer_dma);
+			usb_free_urb(myUrb[i]);
+			myUrb[i]=NULL;
+    	}
     }
     return myLengthUsed;
 }
@@ -276,7 +276,7 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 		case IOCTL_PANTILT:
 			printk(KERN_ALERT "ELE784 -> PAN TILT... \n\r");
 			if(argument < 0 || argument >3)
-				printk(KERN_ALERT   "ELE784 -> IOCTL_PANTILT: Received invalid argument: %d\n");
+				printk(KERN_ALERT   "ELE784 -> IOCTL_PANTILT: Received invalid argument\n");
 			else
 			{
 				switch(argument)
@@ -357,7 +357,7 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
 
         myUrb[i]->transfer_buffer = usb_alloc_coherent(dev, size, GFP_DMA, &myUrb[i]->transfer_dma);
 
-        if (myUrb[i]->transfer_buffer == NULL)
+        if (myUrb[i]->transfer_buffer == NULL)prenom nom #2
         {
         	printk(KERN_ALERT "ELE784 -> One or more urb  transfer buffers could not be allocated \n");
         	usb_free_urb(myUrb[i]);
@@ -382,7 +382,7 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
 
     for(i = 0; i < nbUrbs; i++)
     {
-        if ((ret = usb_submit_urb(myUrb[i], GFP_KERNEL)) < 0) //GFP_ATOMIC
+        if ((ret = usb_submit_urb(myUrb[i], GFP_KERNEL)) < 0)
         {
             printk(KERN_WARNING "ELE784 -> Urb submit to USB core failed: %d\n", ret);
             return ret;
@@ -404,13 +404,11 @@ static void urbCompletionCallback(struct urb *urb)
 
     if(urb->status == 0)
     {
-//    	printk(KERN_ALERT "ELE784 -> valid urb detected, number of packets: %d\n", urb->number_of_packets);
         for (i = 0; i < urb->number_of_packets; ++i)
         {
-//        	printk(KERN_ALERT "ELE784 -> i = %d\n", i);
+
             if(myStatus == 1)
             {
-//            	printk(KERN_ALERT "ELE784 -> continue1\n");
                 continue;
             }
             if (urb->iso_frame_desc[i].status < 0)
@@ -441,7 +439,7 @@ static void urbCompletionCallback(struct urb *urb)
             if (len > maxlen)
             {
                 myStatus = 1; // DONE
-            }
+            }//    	printk(KERN_ALERT "ELE784 -> valid urb detected, number of packets: %d\n", urb->number_of_packets);
 
             // Mark the buffer as done if the EOF marker is set.
             if ((data[1] & (1 << 1)) && (myLengthUsed != 0))
@@ -452,7 +450,7 @@ static void urbCompletionCallback(struct urb *urb)
 
         if (!(myStatus == 1))
         {
-//        	printk(KERN_ALERT "ELE784 -> sending urb...\n");
+        	printk(KERN_ALERT "ELE784 -> sending urb...\n");
             if ((ret = usb_submit_urb(urb, GFP_ATOMIC)) < 0)
             {
                  printk(KERN_ALERT "ELE784 -> error submitting urb\n");
@@ -461,9 +459,10 @@ static void urbCompletionCallback(struct urb *urb)
         else
         {
         	atomic_inc(&myUrbCount);
-        	if(myUrbCount == 5) {
+        	if(atomic_read(&myUrbCount ) == NB_URBS)
+        	{
         		complete(&read_complete);
-        		//printk(KERN_ALERT "ELE784 -> complete signal sent\n");
+        		printk(KERN_ALERT "ELE784 -> complete signal sent\n");
         	}
         }
     }
