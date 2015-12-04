@@ -357,7 +357,7 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
 
         myUrb[i]->transfer_buffer = usb_alloc_coherent(dev, size, GFP_DMA, &myUrb[i]->transfer_dma);
 
-        if (myUrb[i]->transfer_buffer == NULL)prenom nom #2
+        if (myUrb[i]->transfer_buffer == NULL)
         {
         	printk(KERN_ALERT "ELE784 -> One or more urb  transfer buffers could not be allocated \n");
         	usb_free_urb(myUrb[i]);
