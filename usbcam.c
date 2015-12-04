@@ -34,6 +34,7 @@
 //TODO s'assurer qu'on recupere bien la structure usbcamdev dans chaque fonction
 //TODO verifier si usb_submit_urb doit etre GFP_ATOMIC ou GFP_KERNEL
 //TODO verifier si on devrait seulement avec un complete lorsque les 5 urbs sont recus au lieu de pour chacun
+//TODO creer les urb dans IOCTL et passer le pointeur a urbInit solution propose par Matthieu
 
 // Module Information
 MODULE_AUTHOR("prenom nom #1, prenom nom #2");
@@ -49,6 +50,7 @@ static int usbcam_release (struct inode *inode, struct file *filp) ;
 static ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t *f_ops);
 static ssize_t usbcam_write (struct file *filp, const char __user *ubuf, size_t count, loff_t *f_ops);
 static long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg);
+
 module_init(usbcam_init);
 module_exit(usbcam_exit);
 
@@ -62,7 +64,7 @@ static unsigned int myLength;
 static unsigned int myLengthUsed;
 static char * myData;
 static struct urb *myUrb[5];
-static char myUrbCount;
+atomic_t  myUrbCount;
 static unsigned int transfer_buffer_size;
 
 struct usbcam_dev {
@@ -193,7 +195,7 @@ int usbcam_open (struct inode *inode, struct file *filp) {
 		return -ENODEV;
 	}
 	filp->private_data = intf;
-	printK(KERN_ALERT "ELE784 -> intf est assigne");
+	printk(KERN_ALERT "ELE784 -> intf est assigne");
 	return 0;
 }
 
@@ -211,21 +213,18 @@ ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t 
 	struct usb_device *dev = camdev->usbdev;
 	int i;
 	int nbUrbs = 5;
+	int myUrbCountLocal;
 
 	printk(KERN_ALERT "ELE784 -> waiting for completion...\n");
-	while(myUrbCount<nbUrbs)
-	{
-		printk(KERN_ALERT "ELE784 -> waiting for completion...\n");
-		wait_for_completion(&read_complete);
-		printk(KERN_ALERT "ELE784 -> myUrbCount: %d\n", myUrbCount);
-	}
+	wait_for_completion(&read_complete);
+
 	printk(KERN_ALERT "ELE784 -> wait for completion done\n");
 	copy_to_user(ubuf, myData, myLengthUsed);
 	printk(KERN_ALERT "ELE784 -> copy to user done\n");
     for (i = 0; i < nbUrbs; i++)
     {
     	usb_kill_urb(myUrb[i]);
-    	usb_free_coherent(dev, /*myUrb[i]->transfer_buffer_length*/ transfer_buffer_size, myUrb[i]->transfer_buffer, myUrb[i]->transfer_dma);
+    	//usb_free_coherent(dev, /*myUrb[i]->transfer_buffer_length*/ transfer_buffer_size, myUrb[i]->transfer_buffer, myUrb[i]->transfer_dma);
 //    	myUrb[i]->transfer_buffer = usb_alloc_coherent(dev, size, GFP_DMA, &myUrb[i]->transfer_dma);
     	usb_free_urb(myUrb[i]);
     }
@@ -343,10 +342,10 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
     nbUrbs = 5;
     reinit_completion(&read_complete);
     myLengthUsed = 0;
-    myUrbCount = 0;
+    atomic_set(&myUrbCount,0);
     myStatus = 0;
 
-    for (i = 0; i < nbUrbs; i++)
+    for (i = 0; i < nbUrbs; ++i)
     {
         usb_free_urb(myUrb[i]);
         myUrb[i] = usb_alloc_urb(nbPackets, GFP_KERNEL);
@@ -383,7 +382,7 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
 
     for(i = 0; i < nbUrbs; i++)
     {
-        if ((ret = usb_submit_urb(myUrb[i], GFP_ATOMIC)) < 0) //GFP_ATOMIC
+        if ((ret = usb_submit_urb(myUrb[i], GFP_KERNEL)) < 0) //GFP_ATOMIC
         {
             printk(KERN_WARNING "ELE784 -> Urb submit to USB core failed: %d\n", ret);
             return ret;
@@ -461,9 +460,11 @@ static void urbCompletionCallback(struct urb *urb)
         }
         else
         {
-        	myUrbCount++;
-            complete(&read_complete);
-//            printk(KERN_ALERT "ELE784 -> complete signal sent\n");
+        	atomic_inc(&myUrbCount);
+        	if(myUrbCount == 5) {
+        		complete(&read_complete);
+        		//printk(KERN_ALERT "ELE784 -> complete signal sent\n");
+        	}
         }
     }
     else
