@@ -3,7 +3,7 @@
  * Description  : ELE784 Lab2 source
  *
  * Etudiants:  LAPJ05108303(Jonathan Lapointe)
- *             XXXX00000000 (Charles trepanier)
+ *             TREC07029107 (Charles Trepanier)
  */
 
 #include <linux/module.h>
@@ -34,7 +34,7 @@
 
 
 // Module Information
-MODULE_AUTHOR("Jonathan Lapointe, Charles trepanier");
+MODULE_AUTHOR("Jonathan Lapointe, Charles Trepanier");
 MODULE_LICENSE("Dual BSD/GPL");
 
 // Prototypes
@@ -55,7 +55,7 @@ module_exit(usbcam_exit);
 static int  urbInit(struct urb *urb, struct usb_interface *intf);
 static void urbCompletionCallback(struct urb *urb);
 
-
+//global variables
 static unsigned int myStatus;
 static unsigned int myLength;
 static unsigned int myLengthUsed;
@@ -63,8 +63,8 @@ static char * myData;
 static int nbUser=0;
 static struct urb *myUrb[5];
 atomic_t  myUrbCount;
-static unsigned int transfer_buffer_size;
 
+//usb device structure
 struct usbcam_dev
 {
 	struct usb_device *usbdev;
@@ -72,6 +72,7 @@ struct usbcam_dev
 
 struct class * my_class;
 
+//contains the device IDs for the two version of the camera
 static struct usb_device_id usbcam_table[] = {
 // { USB_DEVICE(VENDOR_ID, PRODUCT_ID) },
 { USB_DEVICE(0x046d, 0x08cc) },
@@ -108,12 +109,17 @@ static struct usb_class_driver usbcam_class =
 
 struct completion read_complete;
 
+/*
+ * Function: usbcam_init
+ * Description:
+ * Initializes the required global variables and registers the driver to the USB core.
+ */
 static int __init usbcam_init(void) {
 	int error,i;
 	printk(KERN_ALERT   "ELE784 -> Init...\n");
 	nbUser=0;
 	atomic_set(&myUrbCount,0);
-	error = usb_register(&usbcam_driver);
+	error = usb_register(&usbcam_driver);		//registers the driver to the usb core
 	init_completion(&read_complete);
 	myLength = 42666;
 	myData = kmalloc((myLength * 2)* sizeof(unsigned char), GFP_KERNEL);
@@ -126,13 +132,24 @@ static int __init usbcam_init(void) {
     return error;
 }
 
+/*
+ * Function: usbcam_exit
+ * Description:
+ * Deregisters the driver from the USB core and frees the dynamically allocated memory
+ */
 static void __exit usbcam_exit(void)
 {
 	printk(KERN_ALERT   "ELE784 -> Exiting...\n");
-	usb_deregister(&usbcam_driver);
+	usb_deregister(&usbcam_driver);				//deregisters the driver to the usb core
 	kfree(myData);
 }
 
+/*
+ * Function: usbcam_probe
+ * Description:
+ * This function is called when a new usb device is available. If the device's interface matches,
+ * it is registered to /dev and returns 0 indicating the usb core that the driver will handle this usb device.
+ */
 static int usbcam_probe (struct usb_interface *intf, const struct usb_device_id *devid)
 {
 	struct usbcam_dev *camdev = NULL;
@@ -141,21 +158,21 @@ static int usbcam_probe (struct usb_interface *intf, const struct usb_device_id 
 	if(intf->cur_altsetting->desc.bInterfaceClass == CC_VIDEO)
 	{
 		printk(KERN_ALERT   "ELE784 -> CC_VIDEO device detected\n");
-		if(intf->cur_altsetting->desc.bInterfaceSubClass == SC_VIDEOSTREAMING)
+		if(intf->cur_altsetting->desc.bInterfaceSubClass == SC_VIDEOSTREAMING)		//if the interface matches, the driver will handle the device
 		{
-			camdev = kmalloc (sizeof(struct usbcam_dev), GFP_KERNEL);
+			camdev = kmalloc (sizeof(struct usbcam_dev), GFP_KERNEL);				//allocates memory for the structure
 			if(camdev<0)
 			{
 				printk(KERN_ALERT   "ELE784 -> KMALLOC FAIL...\n");
-				return -1;
+				return -ENODEV;
 			}
 
-			camdev->usbdev = usb_get_dev (interface_to_usbdev(intf));
-			usb_set_intfdata (intf, camdev);
-			usb_register_dev (intf, &usbcam_class);			//enregistre le driver dans /dev
-			usb_set_interface(interface_to_usbdev(intf), 1, 4);
+			camdev->usbdev = usb_get_dev (interface_to_usbdev(intf));				//retrieves the usb driver structure
+			usb_set_intfdata (intf, camdev);										//ties the local structure to the interface
+			usb_register_dev (intf, &usbcam_class);									//registers the usb device in /dev
+			usb_set_interface(interface_to_usbdev(intf), 1, 4);						//sets interface parameters
 			printk(KERN_ALERT   "ELE784 -> SC_VIDEOSTREAMING device detected\n");
-			return 0;
+			return 0;																//tells the usb core that this driver will handle the usb device
 		}
 		else if(intf->cur_altsetting->desc.bInterfaceSubClass == SC_VIDEOCONTROL)
 		{
@@ -163,12 +180,17 @@ static int usbcam_probe (struct usb_interface *intf, const struct usb_device_id 
 			return 0;
 		}
 		else
-			return -1;
+			return -ENODEV;
 	}
 
-	return -1;
+	return -ENODEV;																	//interface is not handled by this driver
 }
 
+/*
+ * Function: usbcam_disconnect
+ * Description:
+ * Deregisters the device from the usb core and frees it's structure memory.
+ */
 void usbcam_disconnect(struct usb_interface *intf)
 {
 	struct usbcam_dev *camdev = NULL;
@@ -179,53 +201,69 @@ void usbcam_disconnect(struct usb_interface *intf)
 	{
 		camdev = (struct usbcam_dev *)usb_get_intfdata(intf);
 		kfree(camdev);
-		usb_set_intfdata (intf, NULL);
-		usb_deregister_dev (intf, &usbcam_class);
+		usb_set_intfdata (intf, NULL);						//unties the local structure from the interface
+		usb_deregister_dev (intf, &usbcam_class);			//deregisters the usb device from the usb core
 		printk(KERN_ALERT   "ELE784 -> Disconnect VIDEOSTREAMING...\n");
 	}
-
 }
 
+/*
+ * Function: usbcam_open
+ * Description:
+ * Passes the usb interface to the file pointer of the user application.
+ */
 int usbcam_open (struct inode *inode, struct file *filp)
 {
 	struct usb_interface *intf;
 	int subminor;
 	printk(KERN_ALERT "ELE784 -> Open... \n\r");
-	if(nbUser!=0)
+	if(nbUser!=0)																	//error if there's already a user
 	{
 		printk(KERN_ALERT "ELE784 -> Open: le peripherique est deja ouvert (1 user max) \n");
 		return -EAGAIN;
 	}
 	subminor = iminor(inode);
-	intf = usb_find_interface(&usbcam_driver, subminor);
+	intf = usb_find_interface(&usbcam_driver, subminor);							//sets the usb interface to the driver
 	if (!intf)
 	{
 		printk(KERN_ALERT "ELE784 -> Open: Ne peux ouvrir le peripherique \n");
 		return -ENODEV;
 	}
-	filp->private_data = intf;
+	filp->private_data = intf;														//sets the file pointer to the usb interface
 	printk(KERN_ALERT "ELE784 -> intf est assigne \n");
-	nbUser++;
+	nbUser++;																		//increments the number of users
 	return 0;
 }
 
+/*
+ * Function: usbcam_release
+ * Description:
+ * Decreases the number of users.
+ */
 int usbcam_release (struct inode *inode, struct file *filp)
 {
 	printk(KERN_ALERT "ELE784 -> Release... \n\r");
 	if(nbUser!=0)
-		nbUser--;
+		nbUser--;		//decrements the number of users
     return 0;
 }
 
+/*
+ * Function: usbcam_read
+ * Description:
+ * Waits for a complete signal from the callback function, then copies the content received to the
+ * user application. The usb urbs are then destroyed and the function returns the size of the copied
+ * content.
+ */
 ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t *f_ops)
 {
 	int i;
-	struct usb_interface *intf = filp->private_data;
-	struct usbcam_dev *camdev = (struct usbcam_dev *)usb_get_intfdata(intf);
+	struct usb_interface *intf = filp->private_data;							//sets the interface pointer
+	struct usbcam_dev *camdev = (struct usbcam_dev *)usb_get_intfdata(intf);	//sets the structure pointer
 	struct usb_device *dev = camdev->usbdev;
 
 	printk(KERN_ALERT "ELE784 -> waiting for completion...\n");
-	wait_for_completion(&read_complete);
+	wait_for_completion(&read_complete);										//waits for all urbs to be received
 
 	if(atomic_read(&myUrbCount )!= NB_URBS)
 	{
@@ -234,10 +272,10 @@ ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t 
 	}
 
 	printk(KERN_ALERT "ELE784 -> waiting for completion done...\n");
-	copy_to_user(ubuf, myData, myLengthUsed);
+	copy_to_user(ubuf, myData, myLengthUsed);									//copies the received data to the user application
 	printk(KERN_ALERT "ELE784 -> copy to user done\n");
 
-    for (i = 0; i < NB_URBS; i++)
+    for (i = 0; i < NB_URBS; i++)												//destroy the urbs
     {
     	if(myUrb[i]!=NULL)
     	{
@@ -250,11 +288,21 @@ ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t 
     return myLengthUsed;
 }
 
+/*
+ * Function: usbcam_write
+ * Description:
+ * Does nothing.
+ */
 ssize_t usbcam_write (struct file *filp, const char __user *ubuf, size_t count, loff_t *f_ops)
 {
     return 0;
 }
 
+/*
+ * Function: usbcam_ioctl
+ * Description:
+ * Used by the user application to send various commands to the driver.
+ */
 long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	unsigned int argument = (unsigned int)arg;
@@ -334,7 +382,7 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 
 		case IOCTL_GRAB:
 			printk(KERN_ALERT "ELE784 -> GRAB... \n\r");
-			urbInit(NULL, intf);
+			urbInit(NULL, intf);							//sends required urbs to the usb core
 			break;
 
 		default:
@@ -351,6 +399,11 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 // **** Private functions **** //
 // *************************** //
 
+/*
+ * Function: urbInit
+ * Description:
+ * Initializes the urbs and submits them to the camera.
+ */
 int urbInit(struct urb *urb, struct usb_interface *intf) {
     int i, j, ret, nbPackets, myPacketSize, size, nbUrbs;
     struct usb_host_interface *cur_altsetting = intf->cur_altsetting;
@@ -361,23 +414,22 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
     nbPackets = 40;  // The number of isochronous packets this urb should contain
     myPacketSize = le16_to_cpu(endpointDesc.wMaxPacketSize);
     size = myPacketSize * nbPackets;
-    transfer_buffer_size = size;
     nbUrbs = 5;
-    reinit_completion(&read_complete);
+    reinit_completion(&read_complete);					//disable the read complete flag
     myLengthUsed = 0;
-    atomic_set(&myUrbCount,0);
+    atomic_set(&myUrbCount,0);							//reinitialize the urb count
     myStatus = 0;
 
     for (i = 0; i < nbUrbs; i++)
     {
-        myUrb[i] = usb_alloc_urb(nbPackets, GFP_KERNEL);
+        myUrb[i] = usb_alloc_urb(nbPackets, GFP_KERNEL);	//creates the urb
         if (myUrb[i] == NULL)
         {
             printk(KERN_ALERT "ELE784 -> One or more urb could not be allocated \n");
             return -ENOMEM;
         }
 
-        myUrb[i]->transfer_buffer = usb_alloc_coherent(dev, size, GFP_DMA, &myUrb[i]->transfer_dma);
+        myUrb[i]->transfer_buffer = usb_alloc_coherent(dev, size, GFP_DMA, &myUrb[i]->transfer_dma);	//allocates memory to the urb
 
         if (myUrb[i]->transfer_buffer == NULL)
         {
@@ -386,6 +438,7 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
             return -ENOMEM;
         }
 
+        //sets urb parameters
         myUrb[i]->dev = dev;
         myUrb[i]->context = dev;
         myUrb[i]->pipe = usb_rcvisocpipe(dev, endpointDesc.bEndpointAddress);
@@ -404,7 +457,7 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
 
     for(i = 0; i < nbUrbs; i++)
     {
-        if ((ret = usb_submit_urb(myUrb[i], GFP_KERNEL)) < 0)
+        if ((ret = usb_submit_urb(myUrb[i], GFP_KERNEL)) < 0)			//submits the urb to the usb core
         {
             printk(KERN_WARNING "ELE784 -> Urb submit to USB core failed: %d\n", ret);
             return ret;
@@ -413,7 +466,12 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
     return 0;
 }
 
-
+/*
+ * Function: urbCompletionCallback
+ * Description:
+ * This function is called by the usb core when an urb has returned from the usb device.
+ * The urb's transfer buffer data is copied to a global variable.
+ */
 static void urbCompletionCallback(struct urb *urb)
 {
     int ret;
@@ -477,8 +535,8 @@ static void urbCompletionCallback(struct urb *urb)
         }
         else
         {
-        	atomic_inc(&myUrbCount);
-        	if(atomic_read(&myUrbCount ) == NB_URBS)
+        	atomic_inc(&myUrbCount);						//updates the received urb count
+        	if(atomic_read(&myUrbCount ) == NB_URBS)		//if all urbs have been received, sends a read complete signal
         	{
         		complete(&read_complete);
         		printk(KERN_ALERT "ELE784 -> complete signal sent\n");

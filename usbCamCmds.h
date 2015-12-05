@@ -1,8 +1,9 @@
 /*
- * usbCamCmds.h
+ * File         : usbCamCmds.h
+ * Description  : ELE784 Lab2 IOCTL commands
  *
- *  Created on: Oct 19, 2015
- *      Author: charles
+ * Etudiants:  LAPJ05108303(Jonathan Lapointe)
+ *             TREC07029107 (Charles Trepanier)
  */
 
 #ifndef USBCAMCMDSCMD_H_
@@ -12,6 +13,7 @@
 
 #define IOCTL_MAGICNUM 's'
 
+//list of available IOCTL commands
 #define IOCTL_STREAMON			_IOR(IOCTL_MAGICNUM, 0, int)
 #define IOCTL_STREAMOFF			_IOR(IOCTL_MAGICNUM, 1, int)
 #define IOCTL_PANTILT			_IOR(IOCTL_MAGICNUM, 2, int)
