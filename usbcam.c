@@ -52,7 +52,7 @@ module_init(usbcam_init);
 module_exit(usbcam_exit);
 
 // Private function prototypes
-static int urbInit(struct urb *urb, struct usb_interface *intf);
+static int  urbInit(struct urb *urb, struct usb_interface *intf);
 static void urbCompletionCallback(struct urb *urb);
 
 
@@ -101,9 +101,9 @@ struct file_operations usbcam_fops = {
 #define USBCAM_MINOR 0
 static struct usb_class_driver usbcam_class =
 {
-	.name       = "usb/usbcam%d",
-	.fops       = &usbcam_fops,
-	.minor_base = USBCAM_MINOR,
+	.name      	 	= "usb/usbcam%d",
+	.fops       	= &usbcam_fops,
+	.minor_base 	= USBCAM_MINOR,
 };
 
 struct completion read_complete;
@@ -226,8 +226,13 @@ ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t 
 
 	printk(KERN_ALERT "ELE784 -> waiting for completion...\n");
 	wait_for_completion(&read_complete);
+
 	if(atomic_read(&myUrbCount )!= NB_URBS)
+	{
+		printk(KERN_ALERT "ELE784 -> pas le bon nombre de URBS \n");
 		return -1;
+	}
+
 	printk(KERN_ALERT "ELE784 -> waiting for completion done...\n");
 	copy_to_user(ubuf, myData, myLengthUsed);
 	printk(KERN_ALERT "ELE784 -> copy to user done\n");
@@ -265,12 +270,15 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 
 	if (_IOC_TYPE(cmd) != IOCTL_MAGICNUM)
 		return -ENOTTY;
+
 	if (_IOC_NR(cmd) > IOCTL_MAXNR)
 		return -ENOTTY;
+
 	if (_IOC_DIR(cmd) & _IOC_READ)
 		err = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
 	else if (_IOC_DIR(cmd) & _IOC_WRITE)
 		err = !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
+
 	if (err)
 		return -EFAULT;
 
@@ -450,7 +458,7 @@ static void urbCompletionCallback(struct urb *urb)
             if (len > maxlen)
             {
                 myStatus = 1; // DONE
-            }//    	printk(KERN_ALERT "ELE784 -> valid urb detected, number of packets: %d\n", urb->number_of_packets);
+            }
 
             // Mark the buffer as done if the EOF marker is set.
             if ((data[1] & (1 << 1)) && (myLengthUsed != 0))
@@ -461,7 +469,7 @@ static void urbCompletionCallback(struct urb *urb)
 
         if (!(myStatus == 1))
         {
-        //	printk(KERN_ALERT "ELE784 -> sending urb...\n");
+
             if ((ret = usb_submit_urb(urb, GFP_ATOMIC)) < 0)
             {
                  printk(KERN_ALERT "ELE784 -> error submitting urb\n");
