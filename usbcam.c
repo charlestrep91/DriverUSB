@@ -60,6 +60,7 @@ static unsigned int myStatus;
 static unsigned int myLength;
 static unsigned int myLengthUsed;
 static char * myData;
+static int nbUser=0;
 static struct urb *myUrb[5];
 atomic_t  myUrbCount;
 static unsigned int transfer_buffer_size;
@@ -110,6 +111,7 @@ struct completion read_complete;
 static int __init usbcam_init(void) {
 	int error,i;
 	printk(KERN_ALERT   "ELE784 -> Init...\n");
+	nbUser=0;
 	atomic_set(&myUrbCount,0);
 	error = usb_register(&usbcam_driver);
 	init_completion(&read_complete);
@@ -189,21 +191,29 @@ int usbcam_open (struct inode *inode, struct file *filp)
 	struct usb_interface *intf;
 	int subminor;
 	printk(KERN_ALERT "ELE784 -> Open... \n\r");
+	if(nbUser!=0)
+	{
+		printk(KERN_ALERT "ELE784 -> Open: le peripherique est deja ouvert (1 user max) \n");
+		return -EAGAIN;
+	}
 	subminor = iminor(inode);
 	intf = usb_find_interface(&usbcam_driver, subminor);
 	if (!intf)
 	{
-		printk(KERN_ALERT "ELE784 -> Open: Ne peux ouvrir le peripherique");
+		printk(KERN_ALERT "ELE784 -> Open: Ne peux ouvrir le peripherique \n");
 		return -ENODEV;
 	}
 	filp->private_data = intf;
-	printk(KERN_ALERT "ELE784 -> intf est assigne");
+	printk(KERN_ALERT "ELE784 -> intf est assigne \n");
+	nbUser++;
 	return 0;
 }
 
 int usbcam_release (struct inode *inode, struct file *filp)
 {
 	printk(KERN_ALERT "ELE784 -> Release... \n\r");
+	if(nbUser!=0)
+		nbUser--;
     return 0;
 }
 
