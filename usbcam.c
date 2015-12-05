@@ -2,8 +2,8 @@
  * File         : usbcam.c
  * Description  : ELE784 Lab2 source
  *
- * Etudiants:  XXXX00000000 (prenom nom #1)
- *             XXXX00000000 (prenom nom #2)
+ * Etudiants:  LAPJ05108303(Jonathan Lapointe)
+ *             XXXX00000000 (Charles trepanier)
  */
 
 #include <linux/module.h>
@@ -27,7 +27,6 @@
 #include <linux/usb.h>
 #include <linux/completion.h>
 #include "usbvideo.h"
-#include "dht_data.h"
 #include "usbCamCmds.h"
 
 #define NB_URBS 5
@@ -65,7 +64,8 @@ static struct urb *myUrb[5];
 atomic_t  myUrbCount;
 static unsigned int transfer_buffer_size;
 
-struct usbcam_dev {
+struct usbcam_dev
+{
 	struct usb_device *usbdev;
 };
 
@@ -73,7 +73,7 @@ struct class * my_class;
 
 static struct usb_device_id usbcam_table[] = {
 // { USB_DEVICE(VENDOR_ID, PRODUCT_ID) },
-//{ USB_DEVICE(0x046d, 0x08cc) },
+{ USB_DEVICE(0x046d, 0x08cc) },
 { USB_DEVICE(0x046d, 0x0994) },
 {}
 };
@@ -108,12 +108,16 @@ static struct usb_class_driver usbcam_class =
 struct completion read_complete;
 
 static int __init usbcam_init(void) {
-	int error;
+	int error,i;
 	printk(KERN_ALERT   "ELE784 -> Init...\n");
+	atomic_set(&myUrbCount,0);
 	error = usb_register(&usbcam_driver);
 	init_completion(&read_complete);
 	myLength = 42666;
 	myData = kmalloc((myLength * 2)* sizeof(unsigned char), GFP_KERNEL);
+
+	for(i=0;i<NB_URBS;i++)
+		myUrb[i]=NULL;
 
 	if(error)
 		printk(KERN_ALERT   "ELE784 -> Initialization failed, error: %d\n",error);
@@ -124,7 +128,6 @@ static void __exit usbcam_exit(void)
 {
 	printk(KERN_ALERT   "ELE784 -> Exiting...\n");
 	usb_deregister(&usbcam_driver);
-	kfree(&read_complete);
 	kfree(myData);
 }
 
@@ -160,13 +163,12 @@ static int usbcam_probe (struct usb_interface *intf, const struct usb_device_id 
 		else
 			return -1;
 	}
-	else
-		return -1;
 
 	return -1;
 }
 
-void usbcam_disconnect(struct usb_interface *intf) {
+void usbcam_disconnect(struct usb_interface *intf)
+{
 	struct usbcam_dev *camdev = NULL;
 	printk(KERN_ALERT   "ELE784 -> Disconnect...\n");
 
@@ -179,9 +181,11 @@ void usbcam_disconnect(struct usb_interface *intf) {
 		usb_deregister_dev (intf, &usbcam_class);
 		printk(KERN_ALERT   "ELE784 -> Disconnect VIDEOSTREAMING...\n");
 	}
+
 }
 
-int usbcam_open (struct inode *inode, struct file *filp) {
+int usbcam_open (struct inode *inode, struct file *filp)
+{
 	struct usb_interface *intf;
 	int subminor;
 	printk(KERN_ALERT "ELE784 -> Open... \n\r");
@@ -197,24 +201,24 @@ int usbcam_open (struct inode *inode, struct file *filp) {
 	return 0;
 }
 
-int usbcam_release (struct inode *inode, struct file *filp) {
+int usbcam_release (struct inode *inode, struct file *filp)
+{
 	printk(KERN_ALERT "ELE784 -> Release... \n\r");
-
-
     return 0;
 }
 
 ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t *f_ops)
 {
+	int i;
 	struct usb_interface *intf = filp->private_data;
 	struct usbcam_dev *camdev = (struct usbcam_dev *)usb_get_intfdata(intf);
 	struct usb_device *dev = camdev->usbdev;
-	int i;
 
 	printk(KERN_ALERT "ELE784 -> waiting for completion...\n");
 	wait_for_completion(&read_complete);
 	if(atomic_read(&myUrbCount )!= NB_URBS)
 		return -1;
+	printk(KERN_ALERT "ELE784 -> waiting for completion done...\n");
 	copy_to_user(ubuf, myData, myLengthUsed);
 	printk(KERN_ALERT "ELE784 -> copy to user done\n");
 
@@ -231,7 +235,8 @@ ssize_t usbcam_read (struct file *filp, char __user *ubuf, size_t count, loff_t 
     return myLengthUsed;
 }
 
-ssize_t usbcam_write (struct file *filp, const char __user *ubuf, size_t count, loff_t *f_ops) {
+ssize_t usbcam_write (struct file *filp, const char __user *ubuf, size_t count, loff_t *f_ops)
+{
     return 0;
 }
 
@@ -243,8 +248,8 @@ long usbcam_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 	struct usb_device *dev = camdev->usbdev;
 	int err = 0;
 	char tempData;
-	char tabHaut[4] = 	{0x00, 0x00, 0x80, 0xFF};
-	char tabBas[4] = 	{0x00, 0x00, 0x80, 0x00};
+	char tabHaut[4]   = {0x00, 0x00, 0x80, 0xFF};
+	char tabBas[4]    = {0x00, 0x00, 0x80, 0x00};
 	char tabGauche[4] = {0x80, 0x00, 0x00, 0x00};
 	char tabDroite[4] = {0x80, 0xFF, 0x00, 0x00};
 
@@ -345,9 +350,8 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
     atomic_set(&myUrbCount,0);
     myStatus = 0;
 
-    for (i = 0; i < nbUrbs; ++i)
+    for (i = 0; i < nbUrbs; i++)
     {
-        usb_free_urb(myUrb[i]);
         myUrb[i] = usb_alloc_urb(nbPackets, GFP_KERNEL);
         if (myUrb[i] == NULL)
         {
@@ -373,7 +377,7 @@ int urbInit(struct urb *urb, struct usb_interface *intf) {
         myUrb[i]->number_of_packets = nbPackets;
         myUrb[i]->transfer_buffer_length = size;
 
-        for (j = 0; j < nbPackets; ++j)
+        for (j = 0; j < nbPackets; j++)
         {
             myUrb[i]->iso_frame_desc[j].offset = j * myPacketSize;
             myUrb[i]->iso_frame_desc[j].length = myPacketSize;
@@ -413,19 +417,16 @@ static void urbCompletionCallback(struct urb *urb)
             }
             if (urb->iso_frame_desc[i].status < 0)
             {
-            	printk(KERN_ALERT "ELE784 -> continue2: %d\n", urb->iso_frame_desc[i].status);
                 continue;
             }
             data = urb->transfer_buffer + urb->iso_frame_desc[i].offset;
             if(data[1] & (1 << 6))
             {
-            	printk(KERN_ALERT "ELE784 -> continue3\n");
                 continue;
             }
             len = urb->iso_frame_desc[i].actual_length;
             if (len < 2 || data[0] < 2 || data[0] > len)
             {
-            	printk(KERN_ALERT "ELE784 -> continue4\n");
                 continue;
             }
 
@@ -450,7 +451,7 @@ static void urbCompletionCallback(struct urb *urb)
 
         if (!(myStatus == 1))
         {
-        	printk(KERN_ALERT "ELE784 -> sending urb...\n");
+        //	printk(KERN_ALERT "ELE784 -> sending urb...\n");
             if ((ret = usb_submit_urb(urb, GFP_ATOMIC)) < 0)
             {
                  printk(KERN_ALERT "ELE784 -> error submitting urb\n");
